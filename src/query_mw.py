@@ -64,7 +64,7 @@ WordEntry = collections.namedtuple(
 def parse_json_resp_item(resp_item) -> WordEntry:
     id_ = resp_item['meta']['id']
     hw = resp_item['hwi']['hw']
-    fl = resp_item['fl']
+    fl = resp_item.get('fl', '??')
     dict_url = ('https://www.merriam-webster.com/dictionary/'
                 + parse.quote(hw))
     try:
@@ -75,6 +75,27 @@ def parse_json_resp_item(resp_item) -> WordEntry:
                                  enumerate(resp_item['shortdef'], 1))
     shortdef = ''.join(shortdef)
     return WordEntry(id_, hw, fl, prs_url, shortdef, dict_url)
+
+
+def generate_response_items_no_such_word(candidate_words: ty.List[str]):
+    if candidate_words:
+        title = 'No such word! Do you mean one of:'
+    else:
+        title = 'No such word!'
+    candidate_words = ', '.join(candidate_words)
+    return [
+        {
+            'title': title,
+            'subtitle': candidate_words,
+            'text': {
+                'largetype': candidate_words,
+            },
+            'valid': False,
+            'icon': {
+                'path': 'error-icon.png',
+            },
+        },
+    ]
 
 
 def generate_response_items(entries: ty.List[WordEntry]):
@@ -138,17 +159,23 @@ def main():
 
     resp = request_mw_dictionary(api_key, query, cachedir, cache_timeout,
                                  proxy)
+    if not resp:
+        return generate_response_items_no_such_word([]), None
     local_entries = []
-    for entry in map(parse_json_resp_item, resp):
-        if entry.prs_url:
-            prs_local_path = request_mw_audio(entry.prs_url, cachedir,
-                                              cache_timeout, proxy)
-        else:
-            prs_local_path = None
-        local_entries.append(
-            WordEntry(entry.id_, entry.word, entry.fl, prs_local_path,
-                      entry.shortdef, entry.dict_url))
-    return generate_response_items(local_entries), None
+    try:
+        for entry in map(parse_json_resp_item, resp):
+            if entry.prs_url:
+                prs_local_path = request_mw_audio(entry.prs_url, cachedir,
+                                                  cache_timeout, proxy)
+            else:
+                prs_local_path = None
+            local_entries.append(
+                WordEntry(entry.id_, entry.word, entry.fl, prs_local_path,
+                          entry.shortdef, entry.dict_url))
+        return generate_response_items(local_entries), None
+    except TypeError:
+        # `resp` could be a list of candidate words (strings)
+        return generate_response_items_no_such_word(resp), None
 
 
 if __name__ == '__main__':
