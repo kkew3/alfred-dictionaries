@@ -31,7 +31,7 @@ def request_google_translate(
 
 
 def parse_json_response(resp):
-    return resp[0][0][0]
+    return ''.join(x[0] for x in resp[0])
 
 
 def get_google_translate_url(
