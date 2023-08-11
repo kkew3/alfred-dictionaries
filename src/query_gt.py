@@ -2,6 +2,7 @@ import sys
 from urllib import parse
 from pathlib import Path
 import datetime as dt
+import hashlib
 import typing as ty
 
 import utils
@@ -23,7 +24,7 @@ def request_google_translate(
         'tl': tl,
         'dt': 't',
     }
-    cache_name = utils.validate_filename(query)
+    cache_name = hashlib.sha1(query.encode('utf-8')).hexdigest()[:12]
     return utils.request_web_json_cached(
         'https://translate.googleapis.com/translate_a/single', params,
         'gg_{}_{}.json'.format(tl, cache_name), cachedir, cache_timeout, proxy)

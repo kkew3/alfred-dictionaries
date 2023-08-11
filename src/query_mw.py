@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib import parse
 import datetime as dt
 import itertools
+import hashlib
 import typing as ty
 
 import utils
@@ -16,7 +17,7 @@ def request_mw_dictionary(
     cache_timeout: ty.Optional[dt.timedelta],
     proxy: ty.Optional[str],
 ) -> list:
-    cache_name = utils.validate_filename(word)
+    cache_name = hashlib.sha1(word.encode('utf-8')).hexdigest()[:12]
     return utils.request_web_json_cached(
         'https://dictionaryapi.com/api/v3/references/collegiate/json/'
         + parse.quote(word), {'key': api_key},

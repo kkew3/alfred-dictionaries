@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 import collections
 import datetime as dt
+import hashlib
 import typing as ty
 
 import utils
@@ -14,7 +15,7 @@ def request_urban_dictionary(
     cache_timeout: ty.Optional[dt.timedelta],
     proxy: ty.Optional[str],
 ) -> dict:
-    cache_name = utils.validate_filename(word)
+    cache_name = hashlib.sha1(word.encode('utf-8')).hexdigest()[:12]
     return utils.request_web_json_cached(
         'https://api.urbandictionary.com/v0/define', {'term': word},
         'ub_{}.json.gz'.format(cache_name), cachedir, cache_timeout, proxy)
