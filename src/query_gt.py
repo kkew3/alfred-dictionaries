@@ -77,6 +77,10 @@ def main():
         query = sys.argv[2]
     except IndexError:
         return [], None
+
+    if cachedir and cache_timeout:
+        utils.rm_obsolete_cache(cachedir, cache_timeout)
+
     resp = request_google_translate(query, tl, cachedir, cache_timeout, proxy)
     translation = parse_json_response(resp)
     return generate_response_items(query, tl, translation), None

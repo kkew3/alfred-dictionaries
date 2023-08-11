@@ -68,6 +68,15 @@ def get_proxy() -> ty.Optional[str]:
     return os.getenv('proxy')
 
 
+def rm_obsolete_cache(cachedir: Path, cache_timeout: dt.timedelta):
+    now = dt.datetime.now()
+    for name in os.listdir(cachedir):
+        cachefile = cachedir / name
+        mt = os.path.getmtime(cachefile)
+        if now - dt.datetime.fromtimestamp(mt) > cache_timeout:
+            os.remove(cachefile)
+
+
 def open_web_for_read(url: str, params: dict, proxy: ty.Optional[str]):
     if proxy:
         proxy_handler = request.ProxyHandler({

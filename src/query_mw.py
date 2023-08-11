@@ -131,6 +131,10 @@ def main():
 
     if not api_key:
         raise MWAPIKeyNotProvided
+
+    if cachedir and cache_timeout:
+        utils.rm_obsolete_cache(cachedir, cache_timeout)
+
     resp = request_mw_dictionary(api_key, query, cachedir, cache_timeout,
                                  proxy)
     local_entries = []

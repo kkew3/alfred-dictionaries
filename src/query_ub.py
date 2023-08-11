@@ -80,6 +80,10 @@ def main():
         query = sys.argv[1]
     except IndexError:
         return [], None
+
+    if cachedir and cache_timeout:
+        utils.rm_obsolete_cache(cachedir, cache_timeout)
+
     resp = request_urban_dictionary(query, cachedir, cache_timeout, proxy)
     entries = parse_json_response(resp)
     entries.sort(key=wilson_score_lb, reverse=True)
