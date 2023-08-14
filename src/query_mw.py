@@ -127,7 +127,7 @@ def generate_response_items(entries: ty.List[WordEntry]):
             'arg': entry.dict_url,
             'mods': mods_dict,
             'text': {
-                'copy': entry.word,
+                'copy': entry.word.replace('*', ''),
                 'largetype': entry.shortdef,
             },
         })
