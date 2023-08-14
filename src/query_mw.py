@@ -80,22 +80,29 @@ def parse_json_resp_item(resp_item) -> WordEntry:
 def generate_response_items_no_such_word(candidate_words: ty.List[str]):
     if candidate_words:
         title = 'No such word! Do you mean one of:'
+        subtitle = 'Select one word and command+c to copy'
     else:
         title = 'No such word!'
-    candidate_words = ', '.join(candidate_words)
-    return [
+        subtitle = ''
+    items = [
         {
             'title': title,
-            'subtitle': candidate_words,
-            'text': {
-                'largetype': candidate_words,
-            },
+            'subtitle': subtitle,
             'valid': False,
             'icon': {
                 'path': 'error-icon.png',
             },
         },
     ]
+    for w in candidate_words:
+        items.append({
+            'title': w,
+            'valid': False,
+            'text': {
+                'copy': w,
+            },
+        })
+    return items
 
 
 def generate_response_items(entries: ty.List[WordEntry]):
