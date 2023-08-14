@@ -2,6 +2,7 @@ import os
 import re
 from pathlib import Path
 from urllib import parse, request
+from urllib.error import URLError
 import datetime as dt
 import gzip
 import json
@@ -77,7 +78,12 @@ def rm_obsolete_cache(cachedir: Path, cache_timeout: dt.timedelta):
             os.remove(cachefile)
 
 
-def open_web_for_read(url: str, params: dict, proxy: ty.Optional[str]):
+def open_web_for_read(
+    url: str,
+    params: dict,
+    proxy: ty.Optional[str],
+    retry: int = 1,
+):
     if proxy:
         proxy_handler = request.ProxyHandler({
             'http': proxy,
@@ -93,7 +99,16 @@ def open_web_for_read(url: str, params: dict, proxy: ty.Optional[str]):
     ]
     if params:
         url = '{}?{}'.format(url, parse.urlencode(params))
-    return opener.open(url)
+
+    try:
+        return opener.open(url)
+    except URLError:
+        for _ in range(retry):
+            try:
+                return opener.open(url)
+            except URLError:
+                pass
+        raise
 
 
 def request_web_json_cached(
@@ -235,4 +250,5 @@ def response_written(main: ty.Callable):
             if variables:
                 resp['variables'] = variables
         print(json.dumps(resp), end='')
+
     return _wrapper
