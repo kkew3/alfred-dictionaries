@@ -1,11 +1,10 @@
 import sys
 from urllib import parse
 from pathlib import Path
-import datetime as dt
 import hashlib
 import typing as ty
 
-import utils
+from alfreddict import utils
 
 
 # Reference:
@@ -13,8 +12,7 @@ import utils
 def request_google_translate(
     query: str,
     tl: ty.Literal['en', 'zh-CN'],
-    cachedir: ty.Optional[Path],
-    cache_timeout: ty.Optional[dt.timedelta],
+    cachedir: Path,
     proxy: ty.Optional[str],
 ):
     params = {
@@ -27,7 +25,7 @@ def request_google_translate(
     cache_name = hashlib.sha1(query.encode('utf-8')).hexdigest()[:12]
     return utils.request_web_json_cached(
         'https://translate.googleapis.com/translate_a/single', params,
-        'gg_{}_{}.json'.format(tl, cache_name), cachedir, cache_timeout, proxy)
+        f'gg_{tl}_{cache_name}.json', cachedir, proxy)
 
 
 def parse_json_response(resp):
@@ -48,7 +46,11 @@ def get_google_translate_url(
     return '{}?{}'.format(url, parse.urlencode(params))
 
 
-def generate_response_items(query: str, tl: str, translation: str):
+def generate_response_items(
+    query: str,
+    tl: ty.Literal['en', 'zh-CN'],
+    translation: str,
+):
     return [
         {
             'title': translation,
@@ -74,15 +76,14 @@ def main():
     proxy = utils.get_proxy()
     tl = sys.argv[1]
     assert tl in ['en', 'zh-CN']
-    try:
-        query = sys.argv[2]
-    except IndexError:
+    if len(sys.argv) <= 2:
         return [], None
+    query = sys.argv[2]
 
-    if cachedir and cache_timeout:
+    if cache_timeout:
         utils.rm_obsolete_cache(cachedir, cache_timeout)
 
-    resp = request_google_translate(query, tl, cachedir, cache_timeout, proxy)
+    resp = request_google_translate(query, tl, cachedir, proxy)
     translation = parse_json_response(resp)
     return generate_response_items(query, tl, translation), None
 

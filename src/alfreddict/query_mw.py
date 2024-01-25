@@ -2,37 +2,34 @@ import sys
 import collections
 from pathlib import Path
 from urllib import parse
-import datetime as dt
 import itertools
 import hashlib
 import typing as ty
 
-import utils
+from alfreddict import utils
 
 
 def request_mw_dictionary(
     api_key: str,
     word: str,
     cachedir: ty.Optional[Path],
-    cache_timeout: ty.Optional[dt.timedelta],
     proxy: ty.Optional[str],
-) -> list:
+) -> ty.List[ty.Any]:
     cache_name = hashlib.sha1(word.encode('utf-8')).hexdigest()[:12]
     return utils.request_web_json_cached(
         'https://dictionaryapi.com/api/v3/references/collegiate/json/'
-        + parse.quote(word), {'key': api_key},
-        'mw_{}.json.gz'.format(cache_name), cachedir, cache_timeout, proxy)
+        + parse.quote(word), {'key': api_key}, f'mw_{cache_name}.json.gz',
+        cachedir, proxy)
 
 
 def request_mw_audio(
     url: str,
-    cachedir: ty.Optional[Path],
-    cache_timeout: ty.Optional[dt.timedelta],
+    cachedir: Path,
     proxy: ty.Optional[str],
-) -> ty.Optional[Path]:
-    cache_name = 'mw_{}'.format(Path(parse.urlparse(url).path).name)
-    return utils.request_web_data_blob_cached(url, {}, cache_name, cachedir,
-                                              cache_timeout, proxy)
+) -> Path:
+    _, _, audio_name = parse.urlparse(url).path.rpartition('/')
+    return utils.request_web_data_blob_cached(url, {}, f'mw_{audio_name}',
+                                              cachedir, proxy)
 
 
 def parse_audio_url(name: str) -> str:
@@ -43,7 +40,6 @@ def parse_audio_url(name: str) -> str:
     :param name: the audio basename
     :return: the audio URL
     """
-    url = 'https://media.merriam-webster.com/audio/prons/en/us/mp3/{}/{}.mp3'
     if name.startswith('bix'):
         subdir = 'bix'
     elif name.startswith('gg'):
@@ -54,7 +50,8 @@ def parse_audio_url(name: str) -> str:
         subdir = 'number'
     else:
         subdir = name[0]
-    return url.format(subdir, name)
+    return (f'https://media.merriam-webster.com/audio/prons/en/us/mp3/'
+            f'{subdir}/{name}.mp3')
 
 
 WordEntry = collections.namedtuple(
@@ -107,10 +104,10 @@ def generate_response_items_no_such_word(candidate_words: ty.List[str]):
 
 def generate_response_items(entries: ty.List[WordEntry]):
     resp = []
-    speaker_char = chr(128264)
+    speaker_emoji = chr(128264)
     for entry in entries:
         if entry.prs_url:
-            title = '{} ({}) {}'.format(entry.word, entry.fl, speaker_char)
+            title = '{} ({}) {}'.format(entry.word, entry.fl, speaker_emoji)
         else:
             title = '{} ({})'.format(entry.word, entry.fl)
         if entry.prs_url:
@@ -161,11 +158,10 @@ def main():
     if not api_key:
         raise MWAPIKeyNotProvided
 
-    if cachedir and cache_timeout:
+    if cache_timeout:
         utils.rm_obsolete_cache(cachedir, cache_timeout)
 
-    resp = request_mw_dictionary(api_key, query, cachedir, cache_timeout,
-                                 proxy)
+    resp = request_mw_dictionary(api_key, query, cachedir, proxy)
     if not resp:
         return generate_response_items_no_such_word([]), None
     local_entries = []
@@ -173,7 +169,7 @@ def main():
         for entry in map(parse_json_resp_item, resp):
             if entry.prs_url:
                 prs_local_path = request_mw_audio(entry.prs_url, cachedir,
-                                                  cache_timeout, proxy)
+                                                  proxy)
             else:
                 prs_local_path = None
             local_entries.append(

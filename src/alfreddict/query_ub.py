@@ -2,23 +2,21 @@ import math
 from pathlib import Path
 import sys
 import collections
-import datetime as dt
 import hashlib
 import typing as ty
 
-import utils
+from alfreddict import utils
 
 
 def request_urban_dictionary(
     word: str,
     cachedir: ty.Optional[Path],
-    cache_timeout: ty.Optional[dt.timedelta],
     proxy: ty.Optional[str],
 ) -> dict:
     cache_name = hashlib.sha1(word.encode('utf-8')).hexdigest()[:12]
     return utils.request_web_json_cached(
         'https://api.urbandictionary.com/v0/define', {'term': word},
-        'ub_{}.json.gz'.format(cache_name), cachedir, cache_timeout, proxy)
+        f'ub_{cache_name}.json.gz', cachedir, proxy)
 
 
 WordEntry = collections.namedtuple(
@@ -50,10 +48,9 @@ def generate_response_items(entries: ty.List[WordEntry]):
     thumbs_down_char = chr(9660)
     for entry in entries:
         resp.append({
-            'title':
-            '{} | {} {}  {} {}'.format(entry.word, thumbs_up_char,
-                                       entry.upvote, thumbs_down_char,
-                                       entry.downvote),
+            'title': (f'{entry.word} | '
+                      f'{thumbs_up_char} {entry.upvote}  '
+                      f'{thumbs_down_char} {entry.downvote}'),
             'subtitle':
             entry.definition,
             'arg':
@@ -82,10 +79,10 @@ def main():
     except IndexError:
         return [], None
 
-    if cachedir and cache_timeout:
+    if cache_timeout:
         utils.rm_obsolete_cache(cachedir, cache_timeout)
 
-    resp = request_urban_dictionary(query, cachedir, cache_timeout, proxy)
+    resp = request_urban_dictionary(query, cachedir, proxy)
     entries = parse_json_response(resp)
     entries.sort(key=wilson_score_lb, reverse=True)
     return generate_response_items(entries), None

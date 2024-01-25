@@ -1,28 +1,24 @@
 import os
 import re
 from pathlib import Path
-from urllib import parse, request
-from urllib.error import URLError
 import datetime as dt
 import gzip
 import json
-import shutil
 import typing as ty
 
+import requests
+from fake_useragent import UserAgent
 
-def get_cachedir() -> ty.Optional[Path]:
-    """
-    Returns ``None`` if 'cachedir' is not set.
 
-    :raise FileNotFoundError: if 'cachedir' is set but does not exist
+def get_cachedir() -> Path:
     """
-    cachedir = os.getenv('cachedir')
-    if not cachedir:
-        return None
-    cachedir = Path(cachedir).expanduser().resolve()
-    if not cachedir.is_dir():
-        raise FileNotFoundError(
-            'cachedir "{}" does not exist'.format(cachedir))
+    Returns the cache directory, which will be created if not exists.
+    """
+    try:
+        cachedir = Path(os.environ['alfred_workflow_cache'])
+    except KeyError as err:
+        raise ValueError('alfred workflow bundle id not set') from err
+    cachedir.mkdir(exist_ok=True)
     return cachedir
 
 
@@ -71,52 +67,31 @@ def get_proxy() -> ty.Optional[str]:
 
 def rm_obsolete_cache(cachedir: Path, cache_timeout: dt.timedelta):
     now = dt.datetime.now()
-    for name in os.listdir(cachedir):
-        cachefile = cachedir / name
+    for cachefile in cachedir.iterdir():
         mt = os.path.getmtime(cachefile)
         if now - dt.datetime.fromtimestamp(mt) > cache_timeout:
-            os.remove(cachefile)
+            cachefile.unlink()
 
 
 def open_web_for_read(
     url: str,
     params: dict,
     proxy: ty.Optional[str],
-    retry: int = 1,
 ):
-    if proxy:
-        proxy_handler = request.ProxyHandler({
-            'http': proxy,
-            'https': proxy,
-        })
-        opener = request.build_opener(proxy_handler)
-    else:
-        opener = request.build_opener()
-    opener.addheaders = [
-        ('User-Agent',
-         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) '
-         'Gecko/20100101 Firefox/109.0'),
-    ]
-    if params:
-        url = '{}?{}'.format(url, parse.urlencode(params))
-
-    try:
-        return opener.open(url)
-    except URLError:
-        for _ in range(retry):
-            try:
-                return opener.open(url)
-            except URLError:
-                pass
-        raise
+    """
+    Return a ``requests`` response object.
+    """
+    headers = {'user-agent': UserAgent().safari}
+    proxies = {'http': proxy, 'https': proxy} if proxy else {}
+    return requests.get(
+        url, params, headers=headers, proxies=proxies, stream=True)
 
 
 def request_web_json_cached(
     url: str,
     params: dict,
     cache_name: str,
-    cachedir: ty.Optional[Path],
-    cache_timeout: ty.Optional[dt.timedelta],
+    cachedir: Path,
     proxy: ty.Optional[str],
     compressed: bool = None,
 ) -> ty.Union[dict, list]:
@@ -127,36 +102,28 @@ def request_web_json_cached(
     :param params: the parameters
     :param cache_name: the basename of the cache to save
     :param cachedir: the base directory for the cache
-    :param cache_timeout: the expiration period for the cache; ``None`` means
-           to never read from cache
-    :param compressed: whether to save cache as gzipped file, default to
-           ``True`` if ``cache_name`` ends with '.gz'
+    :param compressed: whether to save cache as gzipped file, where ``None``
+           means saving as gzipped file if ``cache_name`` ends with '.gz'
     :param proxy: the proxy IP address
     :return: the requested json response
     """
-    save_cache = cachedir and cache_timeout
     if compressed is None:
         compressed = cache_name.endswith('.gz')
-    if save_cache:
-        filename = cachedir / cache_name
-        if filename.is_file():
-            mdate = dt.datetime.fromtimestamp(os.path.getmtime(filename))
-            delta = dt.datetime.now() - mdate
-            if delta > cache_timeout:
-                os.remove(filename)
-        try:
-            if compressed:
-                with gzip.open(filename, 'rb') as infile:
-                    return json.loads(infile.read())
-            else:
-                with open(filename, 'rb') as infile:
-                    return json.load(infile)
-        except (FileNotFoundError, json.JSONDecodeError):
-            pass
+    filename = cachedir / cache_name
+    # try to load from cache
+    try:
+        if compressed:
+            with gzip.open(filename, 'rb') as infile:
+                return json.loads(infile.read())
+        else:
+            with open(filename, 'rb') as infile:
+                return json.load(infile)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    # read from web
     with open_web_for_read(url, params, proxy) as web:
-        resp = json.loads(web.read())
-    if not save_cache:
-        return resp
+        resp = web.json()
+    # save cache
     if compressed:
         with gzip.open(filename, 'wb') as outfile:
             outfile.write(json.dumps(resp).encode('utf-8'))
@@ -170,10 +137,9 @@ def request_web_data_blob_cached(
     url: str,
     params: dict,
     cache_name: str,
-    cachedir: ty.Optional[Path],
-    cache_timeout: ty.Optional[dt.timedelta],
+    cachedir: Path,
     proxy: ty.Optional[str],
-) -> ty.Optional[Path]:
+) -> Path:
     """
     Request data blob from web or cached file.
 
@@ -181,55 +147,25 @@ def request_web_data_blob_cached(
     :param params: the parameters
     :param cache_name: the basename of the cache to save
     :param cachedir: the base directory for the cache
-    :param cache_timeout: the expiration period for the cache; ``None`` means
-           to never read from cache
     :param proxy: the proxy IP address
     :return: the path of the downloaded data blob, or ``None`` if ``cachedir``
              is ``None``
     """
-    if not cachedir:
-        return None
     filename = cachedir / cache_name
-    if filename.is_file():
-        need_download = False
-        if not cache_timeout:
-            os.remove(filename)
-            need_download = True
-        else:
-            mdate = dt.datetime.fromtimestamp(os.path.getmtime(filename))
-            delta = dt.datetime.now() - mdate
-            if delta > cache_timeout:
-                os.remove(filename)
-                need_download = True
-    else:
-        need_download = True
-    if need_download:
+    if not filename.is_file():
         with open_web_for_read(url, params, proxy) as web, \
              open(filename, 'wb') as outfile:
-            shutil.copyfileobj(web, outfile)
+            for chunk in web.iter_content(1048576):
+                outfile.write(chunk)
     return filename
-
-
-def validate_filename(name: str, tr_table: ty.Dict[str, str] = None) -> str:
-    """
-    :param name: the basename to validate
-    :param tr_table: a mapping from invalid chars to substitute chars, default
-           to {':': '_', '/': '_', '\\\\': '_'}
-    :return: validated basename
-    """
-    if tr_table is None:
-        tr_table = {':': '_', '/': '_', '\\': '_'}
-    for old, new in tr_table.items():
-        name = name.replace(old, new)
-    return name
 
 
 def generate_response_err(err):
     return {
         'items': [
             {
-                'title': 'Error occurs: {}'.format(type(err).__name__),
-                'subtitle': 'Message: {}'.format(str(err)),
+                'title': f'Error occurs: {type(err).__name__}',
+                'subtitle': f'Message: {err}',
                 'valid': False,
                 'icon': {
                     'path': 'error-icon.png',
@@ -239,7 +175,12 @@ def generate_response_err(err):
     }
 
 
-def response_written(main: ty.Callable):
+def response_written(main: ty.Callable[[], ty.Tuple[list, ty.Optional[dict]]]):
+    """
+    This is a decorator. The decorated function should return Alfred items dict
+    and an optional variables dict, which will be written to stdout as Alfred
+    json.
+    """
     def _wrapper():
         try:
             items, variables = main()
