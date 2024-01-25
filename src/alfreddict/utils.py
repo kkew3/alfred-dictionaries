@@ -193,3 +193,14 @@ def response_written(main: ty.Callable[[], ty.Tuple[list, ty.Optional[dict]]]):
         print(json.dumps(resp), end='')
 
     return _wrapper
+
+
+def applescript_as_cmd(applescript: str, *argv) -> ty.List[str]:
+    """
+    Rewrite a piece of applescript as ``osascript`` command line.
+    """
+    cmd = ['osascript']
+    for line in filter(None, applescript.split('\n')):
+        cmd.extend(['-e', line.strip()])
+    cmd.extend(argv)
+    return cmd

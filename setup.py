@@ -4,5 +4,5 @@ setup(
     name='alfreddict',
     package_dir={'': 'src'},
     packages=['alfreddict'],
-    version='0.3.0',
+    version='0.3.1',
 )
