@@ -19,6 +19,10 @@
 - [`requests`](https://requests.readthedocs.io/en/latest/)
 - [`fake-useragent`](https://fake-useragent.readthedocs.io/en/latest/)
 
+Optional:
+
+- [`mpg123`](https://www.mpg123.de): Used to pronounce M-W words. If not installed, will fall back to calling QuickTime Player through `osascript`.
+
 ## Installation
 
 1. Clone the repository to `/path/to/repo`.
